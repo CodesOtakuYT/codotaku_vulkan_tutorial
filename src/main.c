@@ -23,7 +23,10 @@ void exitCallback() {
 
 typedef struct {
     // Configurable
+    const char *applicationName;
+    const char *engineName;
     const char *windowTitle;
+
     int windowWidth, windowHeight;
     bool windowResizable;
     bool windowFullscreen;
@@ -36,9 +39,13 @@ typedef struct {
 
     // Vulkan
     uint32_t apiVersion;
+    uint32_t queueFamily;
 
     VkInstance instance;
-
+    VkPhysicalDevice physicalDevice;
+    VkSurfaceKHR surface;
+    VkDevice device;
+    VkQueue queue;
 } State;
 
 void setupErrorHandling() {
@@ -66,6 +73,8 @@ void createInstance(State *state) {
             .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             .pApplicationInfo = &(VkApplicationInfo) {
                     .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+                    .pApplicationName = state->applicationName,
+                    .pEngineName = state->engineName,
                     .apiVersion = state->apiVersion,
             },
             .enabledExtensionCount = requiredExtensionsCount,
@@ -84,11 +93,72 @@ void logInfo() {
     printf("GLFW %s\n", glfwGetVersionString());
 }
 
+void selectPhysicalDevice(State *state) {
+    uint32_t count;
+    PANIC(vkEnumeratePhysicalDevices(state->instance, &count, NULL), "Couldn't enumerate physical devices count")
+    PANIC(count == 0, "Couldn't find a vulkan supported physical device")
+    PANIC(vkEnumeratePhysicalDevices(state->instance, &(uint32_t){1}, &state->physicalDevice), "Couldn't enumerate physical devices count")
+}
+
+void createSurface(State *state) {
+    PANIC(glfwCreateWindowSurface(state->instance, state->window, state->allocator, &state->surface), "Couldn't create window surface")
+}
+
+void selectQueueFamily(State *state) {
+    state->queueFamily = UINT32_MAX;
+
+    uint32_t count;
+    vkGetPhysicalDeviceQueueFamilyProperties(state->physicalDevice, &count, NULL);
+
+    VkQueueFamilyProperties *queueFamilies = malloc(count * sizeof(VkQueueFamilyProperties));
+    PANIC(queueFamilies == NULL, "Couldn't allocate memory")
+    vkGetPhysicalDeviceQueueFamilyProperties(state->physicalDevice, &count, queueFamilies);
+
+    for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < count; ++queueFamilyIndex) {
+        VkQueueFamilyProperties properties = queueFamilies[queueFamilyIndex];
+
+        if((properties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        && glfwGetPhysicalDevicePresentationSupport(state->instance, state->physicalDevice, queueFamilyIndex)) {
+            state->queueFamily = queueFamilyIndex;
+            break;
+        }
+    }
+
+    PANIC(state->queueFamily == UINT32_MAX, "Couldn't find a suitable queue family")
+    free(queueFamilies);
+}
+
+void createDevice(State *state) {
+    PANIC(vkCreateDevice(state->physicalDevice, &(VkDeviceCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pQueueCreateInfos = &(VkDeviceQueueCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = state->queueFamily,
+                .queueCount = 1,
+                .pQueuePriorities = &(float){1.0},
+        },
+        .queueCreateInfoCount = 1,
+        .enabledExtensionCount = 1,
+        .ppEnabledExtensionNames = &(const char *) {VK_KHR_SWAPCHAIN_EXTENSION_NAME},
+    }, state->allocator, &state->device), "Couldn't create device and queues")
+}
+
+void getQueue(State *state) {
+    vkGetDeviceQueue(state->device, state->queueFamily, 0, &state->queue);
+}
+
 void init(State *state) {
     setupErrorHandling();
     logInfo();
+
     createWindow(state);
     createInstance(state);
+
+    selectPhysicalDevice(state);
+    createSurface(state);
+    selectQueueFamily(state);
+    createDevice(state);
+    getQueue(state);
 }
 
 void loop(State *state) {
@@ -98,13 +168,16 @@ void loop(State *state) {
 }
 
 void cleanup(State *state) {
+    vkDestroyDevice(state->device, state->allocator);
+    vkDestroySurfaceKHR(state->instance, state->surface, state->allocator);
     glfwDestroyWindow(state->window);
     vkDestroyInstance(state->instance, state->allocator);
-    state->window = NULL;
 }
 
 int main() {
     State state = {
+        .applicationName = "CODOTAKU",
+        .engineName = "CODOTAKU ENGINE",
         .windowTitle = "CODOTAKU",
         .windowWidth = 720,
         .windowHeight = 480,
