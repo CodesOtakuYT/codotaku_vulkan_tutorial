@@ -75,7 +75,7 @@ void createInstance(State *state) {
 
 void logInfo() {
     uint32_t instanceApiVersion;
-    PANIC(vkEnumerateInstanceVersion(&instanceApiVersion), "Couldn't enumerate instance version");
+    PANIC(vkEnumerateInstanceVersion(&instanceApiVersion), "Couldn't enumerate instance version")
     uint32_t apiVersionVariant = VK_API_VERSION_VARIANT(instanceApiVersion);
     uint32_t apiVersionMajor = VK_API_VERSION_MAJOR(instanceApiVersion);
     uint32_t apiVersionMinor = VK_API_VERSION_MINOR(instanceApiVersion);
