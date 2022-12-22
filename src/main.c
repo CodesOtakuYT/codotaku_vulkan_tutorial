@@ -60,6 +60,10 @@ void createWindow(State *state) {
 
     if(state->windowFullscreen) {
         state->windowMonitor = glfwGetPrimaryMonitor();
+        // Setting width and height to monitor's resolution
+        GLFWvidmode *mode = glfwGetVideoMode(state->windowMonitor);
+        state->windowWidth = mode->width;
+        state->windowHeight = mode->height;
     }
 
     state->window = glfwCreateWindow(state->windowWidth, state->windowHeight, state->windowTitle, state->windowMonitor, NULL);
@@ -170,7 +174,6 @@ void loop(State *state) {
 void cleanup(State *state) {
     vkDestroyDevice(state->device, state->allocator);
     vkDestroySurfaceKHR(state->instance, state->surface, state->allocator);
-    glfwDestroyWindow(state->window);
     vkDestroyInstance(state->instance, state->allocator);
 }
 
