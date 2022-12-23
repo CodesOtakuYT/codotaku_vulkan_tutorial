@@ -6,9 +6,10 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
-#define EXPECT(ERROR, FORMAT, ...) {                                                                                                     \
-    if(ERROR) {                                                                                                                         \
-        fprintf(stderr, "%s -> %s -> %i -> Error(%i):\n\t" FORMAT "\n", __FILE_NAME__, __FUNCTION__, __LINE__, ERROR, ##__VA_ARGS__);   \
+#define EXPECT(ERROR, FORMAT, ...) {                                                                                                    \
+    int errCode;                                                                                                                        \
+    if((errCode = ERROR)) {                                                                                                             \
+        fprintf(stderr, "%s -> %s -> %i -> Error(%i):\n\t" FORMAT "\n", __FILE_NAME__, __FUNCTION__, __LINE__, errCode, ##__VA_ARGS__); \
         raise(SIGABRT);                                                                                                                 \
     }                                                                                                                                   \
 }
