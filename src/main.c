@@ -29,15 +29,11 @@ typedef struct {
     const char *windowTitle;
 
     int windowWidth, windowHeight;
-    bool windowResizable;
     bool windowFullscreen;
 
     VkAllocationCallbacks *allocator;
 
     // GLFW
-    int framebufferWidth;
-    int framebufferHeight;
-
     GLFWmonitor *windowMonitor;
     GLFWwindow *window;
 
@@ -45,7 +41,6 @@ typedef struct {
     uint32_t apiVersion;
     uint32_t queueFamily;
     uint32_t swapchainImageCount;
-    bool recreateSwapchain;
 
     VkInstance instance;
     VkPhysicalDevice physicalDevice;
@@ -63,17 +58,10 @@ void setupErrorHandling() {
     atexit(exitCallback);
 }
 
-void glfwFramebufferSizeCallback(GLFWwindow* window, int width, int height) {
-    State *state = glfwGetWindowUserPointer(window);
-    state->recreateSwapchain = true;
-    state->framebufferWidth = width;
-    state->framebufferHeight = height;
-}
-
 void createWindow(State *state) {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, state->windowResizable);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
     if(state->windowFullscreen) {
         state->windowMonitor = glfwGetPrimaryMonitor();
@@ -84,12 +72,6 @@ void createWindow(State *state) {
     }
 
     state->window = glfwCreateWindow(state->windowWidth, state->windowHeight, state->windowTitle, state->windowMonitor, NULL);
-    glfwSetWindowUserPointer(state->window, state);
-    glfwSetFramebufferSizeCallback(state->window, glfwFramebufferSizeCallback);
-
-    int width, height;
-    glfwGetFramebufferSize(state->window, &width, &height);
-    glfwFramebufferSizeCallback(state->window, width, height);
 }
 
 void createInstance(State *state) {
@@ -204,16 +186,17 @@ void createSwapchain(State *state) {
     }
 
     VkSurfaceFormatKHR format = formats[formatIndex];
+    free(formats);
 
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
     uint32_t presentModeCount;
     EXPECT(vkGetPhysicalDeviceSurfacePresentModesKHR(state->physicalDevice, state->surface, &presentModeCount, NULL), "Couldn't get surface present modes count")
-    VkPresentModeKHR *presentModes = malloc(formatCount*sizeof(VkPresentModeKHR));
+    VkPresentModeKHR *presentModes = malloc(presentModeCount*sizeof(VkPresentModeKHR));
     EXPECT(!presentModes, "Couldn't allocate present modes memory")
 
     uint32_t presentModeIndex = UINT32_MAX;
 
-    for (int i = 0; i < formatCount; ++i) {
+    for (int i = 0; i < presentModeCount; ++i) {
         VkPresentModeKHR mode = presentModes[i];
         if(mode == VK_PRESENT_MODE_MAILBOX_KHR) {
             presentModeIndex = i;
@@ -226,9 +209,6 @@ void createSwapchain(State *state) {
     }
 
     free(presentModes);
-    free(formats);
-
-    VkSwapchainKHR swapchain;
 
     EXPECT(vkCreateSwapchainKHR(state->device, &(VkSwapchainCreateInfoKHR) {
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -239,30 +219,18 @@ void createSwapchain(State *state) {
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        .oldSwapchain = state->swapchain,
         .preTransform = capabilities.currentTransform,
         .imageExtent = capabilities.currentExtent,
         .imageFormat = format.format,
         .imageColorSpace = format.colorSpace,
         .presentMode = presentMode,
         .minImageCount = clamp(3, capabilities.minImageCount, capabilities.maxImageCount ? capabilities.maxImageCount : UINT32_MAX),
-    }, state->allocator, &swapchain), "Couldn't create swapchain")
+    }, state->allocator, &state->swapchain), "Couldn't create swapchain")
 
-    if(state->swapchainImages) {
-        for (int i = 0; i < state->swapchainImageCount; ++i) {
-            vkDestroyImageView(state->device, state->swapchainImageViews[i], state->allocator);
-        }
-        free(state->swapchainImageViews);
-        free(state->swapchainImages);
-    }
-
-    vkDestroySwapchainKHR(state->device, state->swapchain, state->allocator);
-    state->swapchain = swapchain;
-
-    EXPECT(vkGetSwapchainImagesKHR(state->device, swapchain, &state->swapchainImageCount, NULL), "Couldn't get swapchain images count")
+    EXPECT(vkGetSwapchainImagesKHR(state->device, state->swapchain, &state->swapchainImageCount, NULL), "Couldn't get swapchain images count")
     state->swapchainImages = malloc(state->swapchainImageCount*sizeof(VkImage));
     EXPECT(!state->swapchainImages, "Couldn't allocate memory for swapchain images")
-    EXPECT(vkGetSwapchainImagesKHR(state->device, swapchain, &state->swapchainImageCount, state->swapchainImages), "Couldn't get swapchain images")
+    EXPECT(vkGetSwapchainImagesKHR(state->device, state->swapchain, &state->swapchainImageCount, state->swapchainImages), "Couldn't get swapchain images")
     state->swapchainImageViews = malloc(state->swapchainImageCount*sizeof(VkImageView));
     EXPECT(!state->swapchainImageViews, "Couldn't allocate memory for swapchain image views")
 
@@ -294,29 +262,13 @@ void init(State *state) {
     selectQueueFamily(state);
     createDevice(state);
     getQueue(state);
+
+    createSwapchain(state);
 }
 
 void loop(State *state) {
     while(!glfwWindowShouldClose(state->window)) {
         glfwPollEvents();
-        if(state->recreateSwapchain) {
-            state->recreateSwapchain = false;
-            createSwapchain(state);
-        }
-
-/*        uint32_t imageIndex;
-        vkAcquireNextImageKHR(state->device, state->swapchain, UINT64_MAX, NULL, NULL, &imageIndex);
-
-        VkResult result = vkQueuePresentKHR(state->queue, &(VkPresentInfoKHR){
-            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-            .pImageIndices = &(uint32_t){imageIndex},
-            .swapchainCount = 1,
-            .pSwapchains = &state->swapchain,
-        });
-
-        if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-            state->recreateSwapchain = true;
-        }*/
     }
 }
 
@@ -324,6 +276,8 @@ void cleanup(State *state) {
     for (int i = 0; i < state->swapchainImageCount; ++i) {
         vkDestroyImageView(state->device, state->swapchainImageViews[i], state->allocator);
     }
+    free(state->swapchainImageViews);
+    free(state->swapchainImages);
     vkDestroySwapchainKHR(state->device, state->swapchain, state->allocator);
     vkDestroyDevice(state->device, state->allocator);
     vkDestroySurfaceKHR(state->instance, state->surface, state->allocator);
@@ -337,7 +291,6 @@ int main() {
         .windowTitle = "CODOTAKU",
         .windowWidth = 720,
         .windowHeight = 480,
-        .windowResizable = true,
         .windowFullscreen = false,
         .apiVersion = VK_API_VERSION_1_3,
     };
