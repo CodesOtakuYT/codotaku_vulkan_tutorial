@@ -21,7 +21,8 @@ void physicalDeviceSelect(State *state) {
     uint32_t count;
     EXPECT(vkEnumeratePhysicalDevices(state->context.instance, &count, NULL), "Couldn't enumerate physical devices count")
     EXPECT(count == 0, "Couldn't find a vulkan supported physical device")
-    EXPECT(vkEnumeratePhysicalDevices(state->context.instance, &(uint32_t){1}, &state->context.physicalDevice), "Couldn't enumerate physical devices count")
+    VkResult result = vkEnumeratePhysicalDevices(state->context.instance, &(uint32_t){1}, &state->context.physicalDevice);
+    if(result != VK_INCOMPLETE) EXPECT(result, "Couldn't enumerate physical devices")
 }
 
 void queueFamilySelect(State *state) {
