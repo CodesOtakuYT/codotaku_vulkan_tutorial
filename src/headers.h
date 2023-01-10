@@ -50,7 +50,8 @@ typedef struct {
 } Window;
 
 typedef struct {
-
+    VkPipeline graphicsPipeline;
+    VkPipelineLayout pipelineLayout;
 } Renderer;
 
 typedef struct {
