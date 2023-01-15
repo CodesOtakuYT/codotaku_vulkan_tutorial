@@ -52,6 +52,8 @@ typedef struct {
 typedef struct {
     VkPipeline graphicsPipeline;
     VkPipelineLayout pipelineLayout;
+    VkRenderPass renderpass;
+    VkFramebuffer* framebuffers;
 } Renderer;
 
 typedef struct {
