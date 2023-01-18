@@ -13,7 +13,18 @@ void init(State *state) {
 
 void loop(State *state) {
     while(!windowShouldClose(state)) {
+        double frameTimeStart = glfwGetTime();
         windowPollEvents(state);
+        swapchainImageAcquire(state);
+        commandBufferRecord(state);
+        commandBufferSubmit(state);
+        swapchainImagePresent(state);
+        double frameTimeEnd = glfwGetTime();
+        double frameTime = frameTimeEnd-frameTimeStart;
+        double frameFrequency = 1/frameTime;
+        static char fpsString[8];
+        snprintf(fpsString, 8, "FPS: %f\n", frameFrequency);
+        glfwSetWindowTitle(state->window.handle, fpsString);
     }
 }
 

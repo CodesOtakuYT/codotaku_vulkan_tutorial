@@ -273,7 +273,21 @@ void renderpassCreate(State *state) {
         .pSubpasses = (const VkSubpassDescription *) &subpass_descriptions,
         .attachmentCount = sizeof(attachment_descriptions)/sizeof(*attachment_descriptions),
         .pAttachments = attachment_descriptions,
+        .pDependencies = &(VkSubpassDependency) {
+            .srcSubpass = VK_SUBPASS_EXTERNAL,
+            .dstSubpass = 0,
+
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+
+            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        }
     }, state->config.allocator, &state->renderer.renderpass), "Couldn't create renderpass")
+}
+
+void renderpassDestroy(State *state) {
+    vkDestroyRenderPass(state->context.device, state->renderer.renderpass, state->config.allocator);
 }
 
 void framebuffersCreate(State *state) {
@@ -305,17 +319,106 @@ void framebuffersDestroy(State *state) {
     free(state->renderer.framebuffers);
 }
 
+void commandPoolCreate(State *state) {
+    EXPECT(vkCreateCommandPool(state->context.device, &(VkCommandPoolCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = state->context.queueFamily,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+    }, state->config.allocator, &state->renderer.commandPool), "Couldn't create command pool")
+}
+
+void commandPoolDestroy(State *state) {
+    vkDestroyCommandPool(state->context.device, state->renderer.commandPool, state->config.allocator);
+}
+
+void commandBufferAllocate(State *state) {
+    EXPECT(vkAllocateCommandBuffers(state->context.device, &(VkCommandBufferAllocateInfo) {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = state->renderer.commandPool,
+        .commandBufferCount = 1,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    }, &state->renderer.commandBuffer), "Couldn't allocate command buffer")
+}
+
+void syncObjectsCreate(State *state) {
+    EXPECT(vkCreateSemaphore(state->context.device, &(VkSemaphoreCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    }, state->config.allocator, &state->renderer.imageAcquiredSemaphore), "Couldn't create image acquired semaphore")
+
+    EXPECT(vkCreateSemaphore(state->context.device, &(VkSemaphoreCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    }, state->config.allocator, &state->renderer.renderFinishedSemaphore), "Couldn't create render finished semaphore")
+
+    EXPECT(vkCreateFence(state->context.device, &(VkFenceCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    }, state->config.allocator, &state->renderer.inFlightFence), "Couldn't create in-flight fence")
+}
+
+void syncObjectsDestroy(State *state) {
+    vkDestroyFence(state->context.device, state->renderer.inFlightFence, state->config.allocator);
+    vkDestroySemaphore(state->context.device, state->renderer.renderFinishedSemaphore, state->config.allocator);
+    vkDestroySemaphore(state->context.device, state->renderer.imageAcquiredSemaphore, state->config.allocator);
+}
+
+void commandBufferRecord(State *state) {
+    VkCommandBuffer commandBuffer = state->renderer.commandBuffer;
+    uint32_t imageAcquiredIndex = state->window.swapchain.imageAcquiredIndex;
+
+    EXPECT(vkBeginCommandBuffer(commandBuffer, &(VkCommandBufferBeginInfo) {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    }), "Couldn't begin command buffer for frame")
+
+    VkClearValue clearValues[] = {
+            state->config.backgroundColor,
+    };
+
+    vkCmdBeginRenderPass(state->renderer.commandBuffer, &(VkRenderPassBeginInfo) {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = state->renderer.renderpass,
+        .framebuffer = state->renderer.framebuffers[imageAcquiredIndex],
+        .renderArea = (VkRect2D) {
+            .extent = state->window.swapchain.imageExtent,
+        },
+        .clearValueCount = 1,
+        .pClearValues = clearValues,
+    }, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, state->renderer.graphicsPipeline);
+    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer);
+
+    EXPECT(vkEndCommandBuffer(commandBuffer), "Couldn't end command buffer")
+}
+
+void commandBufferSubmit(State *state) {
+    EXPECT(vkQueueSubmit(state->context.queue, 1, &(VkSubmitInfo) {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &state->renderer.commandBuffer,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &state->renderer.imageAcquiredSemaphore,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &state->renderer.renderFinishedSemaphore,
+        .pWaitDstStageMask = (VkPipelineStageFlags[]) {
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        }
+    }, state->renderer.inFlightFence), "Couldn't submit command buffer")
+}
+
 void rendererCreate(State *state) {
     renderpassCreate(state);
     graphicsPipelineCreate(state);
     framebuffersCreate(state);
-}
-
-void renderpassDestroy(State *state) {
-    vkDestroyRenderPass(state->context.device, state->renderer.renderpass, state->config.allocator);
+    commandPoolCreate(state);
+    commandBufferAllocate(state);
+    syncObjectsCreate(state);
 }
 
 void rendererDestroy(State *state) {
+    vkQueueWaitIdle(state->context.queue);
+
+    syncObjectsDestroy(state);
+    commandPoolDestroy(state);
     framebuffersDestroy(state);
     graphicsPipelineDestroy(state);
     renderpassDestroy(state);

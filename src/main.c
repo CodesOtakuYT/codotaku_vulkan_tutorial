@@ -12,6 +12,7 @@ int main() {
                     .apiVersion = VK_API_VERSION_1_3,
                     .swapchainComponentsMapping = (VkComponentMapping) {},
                     .swapchainBuffering = SWAPCHAIN_TRIPLE_BUFFERING,
+                    .backgroundColor = {{0.01f, 0.01f, 0.01f, 0.01f}}
             },
     };
 

@@ -20,6 +20,7 @@ typedef struct {
     VkAllocationCallbacks *allocator;
     VkComponentMapping swapchainComponentsMapping;
     uint32_t swapchainBuffering;
+    VkClearValue backgroundColor;
 } Config;
 
 typedef struct {
@@ -41,6 +42,7 @@ typedef struct {
     VkFormat format;
     VkColorSpaceKHR colorSpace;
     VkExtent2D imageExtent;
+    uint32_t imageAcquiredIndex;
 } Swapchain;
 
 typedef struct {
@@ -54,6 +56,11 @@ typedef struct {
     VkPipelineLayout pipelineLayout;
     VkRenderPass renderpass;
     VkFramebuffer* framebuffers;
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffer;
+    VkSemaphore imageAcquiredSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+    VkFence inFlightFence;
 } Renderer;
 
 typedef struct {

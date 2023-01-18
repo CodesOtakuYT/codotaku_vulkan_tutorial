@@ -1,3 +1,20 @@
+void swapchainImageAcquire(State *state) {
+    EXPECT(vkAcquireNextImageKHR(state->context.device, state->window.swapchain.handle, UINT64_MAX, state->renderer.imageAcquiredSemaphore, NULL, &state->window.swapchain.imageAcquiredIndex), "Couldn't acquire next image")
+}
+
+void swapchainImagePresent(State *state) {
+    EXPECT(vkQueuePresentKHR(state->context.queue, &(VkPresentInfoKHR) {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .swapchainCount = 1,
+        .pSwapchains = &state->window.swapchain.handle,
+        .pImageIndices = &state->window.swapchain.imageAcquiredIndex,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &state->renderer.renderFinishedSemaphore,
+    }), "Couldn't present swapchain image %i", state->window.swapchain.imageAcquiredIndex)
+    EXPECT(vkWaitForFences(state->context.device, 1, &state->renderer.inFlightFence, VK_FALSE, UINT64_MAX), "Couldn't wait for fence")
+    EXPECT(vkResetFences(state->context.device, 1, &state->renderer.inFlightFence), "Couldn't reset the fence")
+}
+
 void windowPollEvents(const State *state) {
     glfwPollEvents();
 }
