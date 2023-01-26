@@ -39,7 +39,7 @@ VkSurfaceCapabilitiesKHR surfaceCapabilitiesGet(const State *state) {
 
 VkSurfaceFormatKHR surfaceFormatsSelect(const State *state) {
     uint32_t formatCount;
-    EXPECT(vkGetPhysicalDeviceSurfaceFormatsKHR(state->context.physicalDevice, state->window.surface, &formatCount, NULL), "Couldn't get surface formats")
+    EXPECT(vkGetPhysicalDeviceSurfaceFormatsKHR(state->context.physicalDevice, state->window.surface, &formatCount, NULL), "Couldn't get surface formats count")
     VkSurfaceFormatKHR *formats = malloc(formatCount*sizeof(VkSurfaceFormatKHR));
     EXPECT(!formats, "Couldn't allocate formats memory")
     EXPECT(vkGetPhysicalDeviceSurfaceFormatsKHR(state->context.physicalDevice, state->window.surface, &formatCount, formats), "Couldn't get surface formats")
@@ -65,6 +65,7 @@ VkPresentModeKHR surfacePresentModesSelect(const State *state) {
     EXPECT(vkGetPhysicalDeviceSurfacePresentModesKHR(state->context.physicalDevice, state->window.surface, &presentModeCount, NULL), "Couldn't get surface present modes count")
     VkPresentModeKHR *presentModes = malloc(presentModeCount*sizeof(VkPresentModeKHR));
     EXPECT(!presentModes, "Couldn't allocate present modes memory")
+    EXPECT(vkGetPhysicalDeviceSurfacePresentModesKHR(state->context.physicalDevice, state->window.surface, &presentModeCount, presentModes), "Couldn't get surface present modes")
 
     uint32_t presentModeIndex = UINT32_MAX;
 
